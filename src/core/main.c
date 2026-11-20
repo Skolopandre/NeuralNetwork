@@ -10,100 +10,7 @@
 #include "math.h"
 
 
-#define FILE_WEIGHT "C:/Users/limer/CLionProjects/NeuralNetwork/data/weights.txt"
-#define SAMPLE_COUNT 100
-
-#define SAMPLE_COUNT 12000
-
-#define WASHOUT_SIZE 2000
-#define TRAIN_SIZE   8000
-#define TEST_SIZE    2000
-
-#define TRAIN_START  WASHOUT_SIZE
-#define TEST_START   (TRAIN_START + TRAIN_SIZE)
-
-#define RESERVOIR_SIZE 500
-
-static void run_mackey_glass_test(Network_t NN, const float *series)
-{
-    if (!NN || !series) {
-        return;
-    }
-
-    printf("Starting Mackey-Glass experiment...\n");
-
-    /*
-     * 1. Reset reservoir state.
-     */
-    network_reset_reservoir(NN);
-
-    /*
-     * 2. Washout.
-     */
-    printf("Washout...\n");
-
-    for (size_t i = 0; i < WASHOUT_SIZE; ++i) {
-        forward_propagation(NN, &series[i]);
-    }
-
-    /*
-     * 3. Training.
-     */
-    printf("Training...\n");
-
-    for (size_t i = TRAIN_START; i < TEST_START; ++i) {
-
-        float input = series[i];
-        float target = series[i + 1];
-
-        train(NN, &input, &target);
-
-        if ((i - TRAIN_START + 1) % 1000 == 0) {
-            printf("Training: %zu / %d\n",
-                   i - TRAIN_START + 1,
-                   TRAIN_SIZE);
-        }
-    }
-
-    /*
-     * 4. Testing.
-     */
-    printf("Testing...\n");
-
-    float squared_error = 0.0f;
-
-    for (size_t i = TEST_START; i < SAMPLE_COUNT - 1; ++i) {
-
-        float input = series[i];
-        float target = series[i + 1];
-
-        forward_propagation(NN, &input);
-
-        const float *output =
-            layer_get_values(network_get_layer(NN,network_get_num_layers(NN)-1));
-
-        if (!output) {
-            fprintf(stderr, "Invalid network output.\n");
-            return;
-        }
-
-        float prediction = output[0];
-        float error = prediction - target;
-
-        squared_error += error * error;
-
-        if ((i - TEST_START) % 200 == 0) {
-            printf("Target: %.6f | Prediction: %.6f\n",
-                   target,
-                   prediction);
-        }
-    }
-
-    const float rmse = sqrtf(squared_error / TEST_SIZE);
-
-    printf("\nExperiment completed.\n");
-    printf("RMSE: %.8f\n", rmse);
-}
+#define FILE_WEIGHT "data/weights.txt"
 
 static bool mackey_glass_generate(
     float *output,
@@ -436,7 +343,7 @@ void MNIST(char* data_file, char* label_file,char* test_data_file, char* test_la
 }
 
 void reservoirTest() {
-    float *series = malloc(SAMPLE_COUNT * sizeof(float));
+    float *series = malloc(12000 * sizeof(float));
 
     if (!series) {
         return ;
@@ -444,7 +351,7 @@ void reservoirTest() {
 
     if (!mackey_glass_generate(
             series,
-            SAMPLE_COUNT,
+            12000,
             0.1,
             0.2,
             0.1,
@@ -457,18 +364,14 @@ void reservoirTest() {
             }
 
     network_builder_t builder = builder_init(1);
-
     builder_add_reservoir(
         builder,
-        RESERVOIR_SIZE,
+        500,
         TANH,
-        0.6f,
+        0.5f,
         0.2f,
-        0.9f
-    );
-
+        0.01f);
     builder_add_dense(builder, 1, LRELU);
-
     Network_t NN = init_network(builder, ADAMW);
 
     if (!NN) {
@@ -476,7 +379,50 @@ void reservoirTest() {
         return ;
     }
 
-    run_mackey_glass_test(NN, series);
+    TrainingController_t controller = create_training_controller(
+        10,
+        0.0008f,
+        50,
+        0.0003f
+    );
+
+    int epochs = train_sequence_to_minimal_error(
+        NN,
+        series,
+        12000,
+        2000,
+        8000,
+        10000,
+        0.003f,
+        1,
+        controller
+    );
+    printf("Nombre d'epoch pour entrainement: %d\n",epochs);
+
+    printf("Testing...\n");
+
+    float squared_error = 0.0f;
+    for (size_t i = 2000; i < 12000 - 1; ++i) {
+        float input = series[i];
+        float target = series[i + 1];
+        forward_propagation(NN, &input);
+
+        const float *output = layer_get_values(network_get_layer(NN,network_get_num_layers(NN)-1));
+
+        if (!output) {
+            fprintf(stderr, "Invalid network output.\n");
+            return;
+        }
+
+        float prediction = output[0];
+        float error = prediction - target;
+
+        squared_error += error * error;
+
+        if ((i - 10001) % 200 == 0) {
+            printf("Target: %.6f | Prediction: %.6f\n",target,prediction);
+        }
+    }
 
     free_network(NN);
     free(series);
@@ -509,10 +455,10 @@ int main(){
             XOR();
             break;
         case 3:
-            MNIST("C:/Users/limer/CLionProjects/NeuralNetwork/data/train-images.idx3-ubyte",
-                "C:/Users/limer/CLionProjects/NeuralNetwork/data/train-labels.idx1-ubyte",
-                "C:/Users/limer/CLionProjects/NeuralNetwork/data/t10k-images.idx3-ubyte",
-                "C:/Users/limer/CLionProjects/NeuralNetwork/data/t10k-labels.idx1-ubyte");
+            MNIST("data/train-images.idx3-ubyte",
+                "data/train-labels.idx1-ubyte",
+                "data/t10k-images.idx3-ubyte",
+                "data/t10k-labels.idx1-ubyte");
             break;
         case 4 :
             reservoirTest();
