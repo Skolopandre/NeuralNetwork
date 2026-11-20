@@ -329,31 +329,98 @@ void train_batch(
     }
 }
 
-#define WASHOUT_SIZE  2000
-#define TRAIN_SIZE    8000
-#define TEST_SIZE     2000
-
-#define TRAIN_START   WASHOUT_SIZE
-#define TEST_START    (TRAIN_START + TRAIN_SIZE)
-void train_mackey_glass(
+int train_sequence_to_minimal_error(
     Network_t NN,
     const float *series,
-    size_t sample_count
-) {
-    if (!NN || !series || sample_count <= TEST_START + 1) {
-        return;
+    size_t series_size,
+    size_t washout,
+    size_t train_size,
+    size_t validation_start,
+    float learning_rate,
+    int max_epoch,
+    TrainingController_t controller)
+{
+    if (!NN || !series || !controller || max_epoch <= 0)
+        return -1;
+
+    if (washout + train_size >= series_size)
+        return -1;
+
+    const size_t train_start = washout;
+
+    Optimizer_t opt = network_get_optimizer(NN);
+    if (opt) {
+        set_learning_rate(opt, learning_rate);
     }
 
-    // 1. Washout
-    for (size_t i = 0; i < WASHOUT_SIZE; ++i) {
-        forward_propagation(NN, &series[i]);
+    // Réinitialisation du TrainingController.
+    training_controller_reset(controller);
+
+    int epoch;
+
+    for (epoch = 0; epoch < max_epoch; ++epoch) {
+
+        /*
+         * 1. Réinitialisation de l'état du Reservoir.
+         */
+        network_reset_reservoir(NN);
+
+        /*
+         * 2. Washout.
+         */
+        for (size_t i = 0; i < washout; ++i) {
+            forward_propagation(NN, &series[i]);
+        }
+
+        /*
+         * 3. Entraînement.
+         */
+        for (size_t i = train_start; i < validation_start ; ++i) {
+            const float *input = &series[i];
+            const float *target = &series[i + 1];
+
+            train(NN, input, target);
+        }
+
+        /*
+         * 4. Validation sans mise à jour des poids.
+         *
+         * On conserve l'état du Reservoir obtenu après
+         * l'entraînement et on poursuit la séquence.
+         */
+        double validation_error = 0.0;
+
+        Layer_t output_layer = network_get_layer(NN,network_get_num_layers(NN) - 1);
+
+        for (size_t i = validation_start; i < series_size; ++i) {
+
+            forward_propagation(NN, &series[i]);
+
+            const float *prediction = layer_get_values(output_layer);
+
+            if (!prediction)
+                return -1;
+
+            const double error = prediction[0] - series[i + 1];
+
+            validation_error += error * error;
+        }
+
+        const float validation_loss =
+            (float)(validation_error / (series_size-validation_start));
+
+        /*
+         * 5. Mise à jour du TrainingController.
+         */
+        training_controller_update(controller, validation_loss);
+
+        printf("Epoch %d | Validation RMSE: %.6f\n",
+               epoch + 1, sqrtf(validation_loss));
+
+        if (training_controller_should_stop(controller)) {
+            break;
+        }
     }
 
-    // 2. Training
-    for (size_t i = TRAIN_START; i < TEST_START; ++i) {
-        float input = series[i];
-        float target = series[i + 1];
-
-        train(NN, &input, &target);
-    }
+    return epoch + 1;
 }
