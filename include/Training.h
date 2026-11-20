@@ -78,11 +78,16 @@ void train_batch(
     int output_size
 );
 
-void train_mackey_glass(
+int train_sequence_to_minimal_error(
     Network_t NN,
     const float *series,
-    size_t sample_count
-);
+    size_t series_size,
+    size_t washout,
+    size_t train_size,
+    size_t validation_start,
+    float learning_rate,
+    int max_epoch,
+    TrainingController_t controller);
 
 
 #endif
