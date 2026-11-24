@@ -28,7 +28,7 @@ backpropagation, and parameter updates.
 
 ### General architecture
 
-Networks are built by assembling layers with a `network\_builder`. The
+Networks are built by assembling layers with a `network_builder`. The
 builder prepares the layers and transfers ownership to the network when
 it is initialized.
 
@@ -139,12 +139,12 @@ MNIST images. Adapt the function names and arguments to the exact API
 available in the current project version.
 
 ``` c
-network\_builder\_t builder = builder\_init(28 \* 28);
+network_builder_t builder = builder_init(28 \* 28);
 
-builder\_add\_dense(builder, 128, LRELU);
-builder\_add\_dense(builder, 10, LRELU);
+builder_add_dense(builder, 128, LRELU);
+builder_add_dense(builder, 10, LRELU);
 
-Network\_t network = init\_network(builder, ADAMW);
+Network_t network = init_network(builder, ADAMW);
 ```
 
 Available optimizer identifiers:
